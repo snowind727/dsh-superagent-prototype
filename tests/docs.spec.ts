@@ -13,7 +13,7 @@ function links(file: string): string[] {
   return [...readFileSync(file, 'utf8').matchAll(/\]\(([^)\s]+)\)/g)].map(match => match[1]!.split('#')[0]!).filter(target => target && !/^[a-z]+:/.test(target))
 }
 const files = (directory: string): string[] => readdirSync(join(ROOT, directory), { recursive: true, withFileTypes: true })
-  .filter(entry => entry.isFile()).map(entry => relative(ROOT, join(entry.parentPath, entry.name)))
+  .filter(entry => entry.isFile() && entry.name !== '.DS_Store').map(entry => relative(ROOT, join(entry.parentPath, entry.name)))
 /**
  * Extract repo-relative file paths from the first column of a table under `## <heading>` in `docs/007-architecture.md`.
  * Bare filenames inherit the directory of the preceding path in the same cell.

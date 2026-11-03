@@ -64,6 +64,11 @@ describe('setup', () => {
     expect(deployment).not.toHaveProperty('feishu')
     // A renamed repository is still resolved by its old name; notifications carry GitHub's current full_name.
     expect((await resolveDeployment(machine(), { repository: 'acme/gadgets', cli: 'gh' }, probe, path)).repository).toBe('acme/widgets')
+    // When neither repository nor CLI is set, resolves a local workspace deployment without probing GitHub.
+    expect(await resolveDeployment(machine(), {}, probe, path)).toMatchObject({
+      repository: 'local/workspace',
+      github: { cli: '', login: 'local-agent', noreply: 'local-agent@users.noreply.github.com' },
+    })
   })
   it('names what setup needs and where it is set', async () => {
     const needs = (place: string, code: string, values: Record<string, unknown>, github: unknown) =>

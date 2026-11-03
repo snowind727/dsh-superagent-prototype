@@ -103,7 +103,7 @@ export const githubKind: SourceKind<GithubConfig> = {
         DSH_SUPERAGENT_GITHUB_PR_HEAD: number && trigger?.meta.isPr === true ? `refs/pull/${number}/head` : '' }
     },
   },
-  facts: (deployment): Record<string, Localized | string> => deployment ? {
+  facts: (deployment): Record<string, Localized | string> => deployment?.github.cli ? {
     cli: { zh: `当前账号 @${deployment.github.login}`, en: `Current account @${deployment.github.login}` },
   } : {},
 }
@@ -133,7 +133,7 @@ async function watch(ctx: SourceContext, signal: AbortSignal): Promise<void> {
   while (!signal.aborted) {
     const config = ctx.config<GithubConfig>(SOURCE)
     try {
-      if (config) interval = await pollRound(ctx, signal)
+      if (config && ctx.deployment.github.cli) interval = await pollRound(ctx, signal)
       else ctx.report('github', health('paused', 'sourceOff'))
       failures = 0
     } catch (error) {
