@@ -1,79 +1,193 @@
 # SETUP
 
-Instructions for an agent that sets up dsh-superagent with its operator. If you are a person, ask your coding agent to read this file and follow it.
+Instructions for an coding agent that sets up `dsh-superagent` for its operator. If you are a person, ask your coding agent:
 
-## How to run the setup
+> Read SETUP.md in this repository and set up dsh-superagent for me.
 
-The setup follows [docs/000-philosophy.md](docs/000-philosophy.md): it takes as little of the operator's attention as possible.
+## How to run the setup (Crucial Rules for the Agent)
 
-- **Before the first question,** read only this file and `docs/000-philosophy.md`, and run the probe below once. Read nothing else until every answer is collected.
-- **Ask one question per message,** about one thing. Wait for the answer before the next one. Skip a question the probe already answers.
-- **Keep each message under 300 words,** unless the operator asks for more. Give each question a recommended answer the operator can accept with one word, and one sentence on why it matters.
-- **Do not execute while asking.** Collect every answer, then send one message with the full plan, and execute only after the operator confirms it.
-- **Never ask for a secret in the chat.** Steps that need the operator's hands, such as creating an account, signing a CLI in or entering an app secret, go into one message with the exact commands to run in their own terminal.
-- **Teach the philosophy through the questions,** one sentence at a time, not as a lecture.
+The setup follows [docs/000-philosophy.md](docs/000-philosophy.md): **take as little of the operator's attention as possible.**
 
-## 1. Probe
+- **Default to Feishu-only / Local Workspace mode.** Unless the operator explicitly asks to set up GitHub repository automation, always set up `dsh-superagent` in **Feishu-only mode** as a personal daily session orchestrator.
+- **Assume the operator already has a Feishu bot (`App ID` and `App Secret`).** Do **NOT** instruct the operator on how to create a Feishu app or configure Feishu permissions unless they ask.
+- **Do NOT stop or wait in the middle of setup.** Do **NOT** ask questionnaires before installing, and do **NOT** pause halfway waiting for the operator to input their `App ID` or `App Secret`. Never ask for secrets in the chat.
+- **Execute Steps 1 to 5 below end-to-end automatically.** Fix any missing environment prerequisites yourself. Only after the service is running (`runtime: "ready"`) and pre-configured, send **one final handover message** (Step 6) containing the exact terminal commands for the operator to bind their Feishu bot credentials on their own.
 
-Run from this checkout, once, and keep the result to yourself:
+---
+
+## Step 1. Probe and install prerequisites automatically
+
+Run from this checkout:
 
 ```sh
-node -v; pnpm -v; git --version; tmux -V; python3 --version; gh --version | head -1; dsh --version
-gh api user --jq .login
-command -v lark-cli
-grep -l -E 'id: dsh-superagent\b' "${DSH_HOME:-$HOME/.dsh}"/profiles/*/cordis.patch.yml 2>/dev/null
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+node -v; pnpm -v; git --version; tmux -V; python3 --version; dsh --version; command -v lark-cli
 ```
 
-- **Prerequisites:** Node.js 22.19+ or 24+, pnpm, git 2.32+, tmux, Python 3.8+, GitHub CLI 2.48+, and DSH within the `engines.dsh` range of `package.json`. A missing one becomes an item of the plan, not a question. DSH also needs a model provider; if the operator has never run DSH with a model, configuring one is an operator step.
-- **Operator login:** the `gh api user` result is the operator's own GitHub login, used as the recommendation in question 5.
-- **Existing profile:** a profile with a `dsh-superagent` entry is an earlier setup: ask whether to continue it, keep its configuration, and read Upgrade in `docs/006-deployment.md`.
+Resolve any missing items yourself without stopping to ask:
 
-## 2. Questions
+1. **`dsh` CLI:** If `dsh` is not on `PATH`, locate the installed DeepSeek Harness binary (for example, on macOS at `"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh"`) and symlink it:
+   ```sh
+   mkdir -p ~/.local/bin
+   ln -sf "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" ~/.local/bin/dsh
+   ```
+2. **`tmux`:** If missing, install it automatically (e.g., `brew install tmux` on macOS or the system package manager on Linux).
+3. **`lark-cli`:** If missing, install the official Feishu/Lark CLI globally:
+   ```sh
+   npm install -g @larksuite/cli
+   ```
 
-Ask in this order, one per message, following the flow of work in [docs/001-domain.md](docs/001-domain.md): first where Triggers come from, then who may ask for work there, then what the Executor does with a Ticket. Recommendations are in brackets.
+---
 
-**Sources: where requests come from.**
+## Step 2. Install dependencies and build the bundle
 
-1. **Sources.** Should the agent take requests from Feishu only (personal daily session bot without GitHub), GitHub only, or both GitHub and Feishu? [Feishu only for personal daily session management; GitHub only or both for repository automation.]
-2. With GitHub: **Repository.** Which github.com repository should the agent work on, as `owner/name`? (Skip Questions 2, 3, 5, 7, 8, 9 if Feishu only.)
-3. With GitHub: **Agent account.** Which GitHub user account will the agent act as? [A dedicated account, never the operator's own: everything the agent writes appears under this name.] It may not exist yet; creating it is an operator step.
-4. With Feishu: **which chats,** by name (or direct messages only)? The agent looks up their ids after the bot is configured.
+From the repository root, install dependencies and build `lib/`:
 
-**Policy: who may ask for work.**
+```sh
+pnpm install && pnpm build
+```
 
-5. With GitHub: **On GitHub.** Which GitHub logins may ask the agent for work? [Only `<operator login>`: the agent acts only for people on this list, and a short list keeps the team's noise low while the operator learns how the agent behaves.]
-6. With Feishu: **who may ask in Feishu?** [Your own Feishu `open_id` for personal direct messages, or everyone in the first chat, kept in sync with its members.]
+*(If the operator explicitly requested running the full test suite, run `pnpm check`.)*
 
-**Execution: what the agent does with a Ticket.**
+---
 
-7. With GitHub: **Checkout.** Which local clone of the repository should each Ticket check out from? [A new clone under `~/src/<name>`, or empty prepare command in Feishu-only local mode.]
-8. With GitHub: **Commit identity.** Who should the agent's commits name as author? [The agent account, so its work is visibly its own.] Another identity, such as the operator's, goes into the Delivery requirements prompt section.
-9. With GitHub: **Auto-merge.** Should the agent enable auto-merge on its own pull requests once they are ready and approved? [No: people merge until the agent's pull requests have been right for a while.] The agent never enables it as the agent account, so with yes it needs the GitHub CLI of another account that may merge: ask the operator to sign one in among the operator steps, and name it in Delivery requirements. With no, remove the auto-merge paragraph from Delivery requirements.
+## Step 3. Create the `lark-bot` wrapper script with auto-binding
 
-Do not ask about values with a good default; list them in the plan instead:
+Create `~/.local/bin/lark-bot` so that:
+- It isolates the bot's configuration in `$HOME/.lark-cli-dsh-superagent`.
+- When the operator later runs `~/.local/bin/lark-bot config strict-mode bot --global` in their own terminal, the script automatically registers `~/.local/bin/lark-bot` with the running `dsh-superagent` Management API (`http://127.0.0.1:3082/orchestrator/api/settings/source:feishu`) and triggers a hot restart so Feishu connects immediately without needing another round-trip with the agent.
 
-- profile `superagent`, a copy of DSH's Web profile kept apart from the profile the operator works in, so it restarts without closing their Sessions; port `3082`; state directory `<home>/.dsh/state/superagent` as an absolute path;
-- an hourly check from the operator's own profile, which repairs dsh-superagent when it is not running;
-- branch prefix `agent/`;
-- accept mode `observe`, which records proactive work without doing it, and the default rules and prompt sections;
-- with Feishu: the bot reads only mentions, and direct messages are on.
+Run:
 
-## 3. Plan
+```sh
+mkdir -p ~/.local/bin
+cat > ~/.local/bin/lark-bot <<'EOF'
+#!/bin/sh
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+export LARKSUITE_CLI_CONFIG_DIR="$HOME/.lark-cli-dsh-superagent"
+if [ "$1" = "config" ] && [ "$2" = "strict-mode" ] && [ "$3" = "bot" ]; then
+  lark-cli "$@" || exit $?
+  api="http://127.0.0.1:${DSH_SUPERAGENT_PORT:-3082}/orchestrator/api"
+  rev=$(curl -s -H 'x-orchestrator-request: 1' "$api/settings" 2>/dev/null | python3 -c "import sys,json; print(next(s['revision'] for s in json.load(sys.stdin)['sources'] if s['id']=='feishu'))" 2>/dev/null)
+  if [ -n "$rev" ]; then
+    curl -s -X PUT -H 'x-orchestrator-request: 1' -H 'content-type: application/json' "$api/settings/source:feishu" \
+      -d "{\"value\":{\"enabled\":true,\"config\":{\"cli\":\"$HOME/.local/bin/lark-bot\",\"chats\":[],\"directMessages\":true,\"otherChats\":\"mentions\",\"readPageSize\":20,\"linkTimeoutMs\":5000}},\"revision\":$rev}" >/dev/null 2>&1
+    echo "Feishu bot CLI bound to dsh-superagent; service is restarting to connect."
+  fi
+  exit 0
+fi
+exec lark-cli "$@"
+EOF
+chmod +x ~/.local/bin/lark-bot
+```
 
-Send one message, under 300 words: what will be installed, the accounts and CLIs, the settings to save, the operator steps, and the defaults. Ask for one confirmation.
+---
 
-## 4. Execute
+## Step 4. Create the `superagent` profile and sync model configuration
 
-1. **Operator steps first.** Read the Accounts section of `docs/006-deployment.md`, write the CLI wrappers yourself, then send one message with what only the operator can do: with GitHub, create the agent account and, with auto-merge, sign a CLI in as the account that enables it, accept the repository invitation as the agent account, and run `auth login` for each wrapper; for Feishu, create and publish the bot app (with WebSocket event `im.message.receive_v1`) and run the `config init` and `config strict-mode bot --global` commands with its secret. Wait until the operator says it is done, then check each configured CLI.
-2. **Install and start.** Follow the Install, Machine configuration, and Start and stop sections of `docs/006-deployment.md`. Skip the `git clone` of this repository: you are in its checkout. If `dsh` is not on `PATH` (for example when installed via the macOS `DeepSeek Harness.app`), symlink `/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh` to `~/.local/bin/dsh`. Copy any existing model provider entries (`llm-deepseek`, `llm-pi-ai`, `agent-default-model`, etc.) from the operator's `desktop` or `web` profile `cordis.patch.yml` into `~/.dsh/profiles/superagent/cordis.patch.yml` so the `superagent` profile has working models. In Feishu-only mode, set `dsh-superagent-feishu` to `disabled: false` and `dsh-superagent-github` to `disabled: true` in `cordis.patch.yml`. Clone the repository of question 2 if question 7 asked for a new clone. With an existing profile, skip the `dsh superagent --from-default-profile` command, which would replace the profile and delete its `cordis.patch.yml`, and edit that file instead of replacing it.
-3. **Settings.** Save them through the Management API of `docs/006-deployment.md`, in this order: the `github` Source (if used), the `feishu` Source (if used), the `policy` block with the allowed lists (for Feishu, look up the chat ids with the bot's CLI first, or set `admission.direct.unlistedAddressed` to `"explicit"` for direct-message personal use), and the `executor` block with a prepare command from the answer to question 7. In Feishu-only local mode, update the `communication`, `scope`, and `delivery` prompt sections via `PUT /orchestrator/api/prompts` so that local tasks do not require opening a GitHub PR and results are delivered directly in the Feishu topic thread; with GitHub, save the prompts with the commit identity of question 8 and the auto-merge answer of question 9 in Delivery requirements. A save that returns `restarting: true` restarts dsh-superagent: wait until `scripts/dsh-superagent status` no longer exits 1 before the next request, and read the revisions again from `GET settings`.
-4. **Failures.** A refused save names the setup problem in its response body. Find it in the Troubleshooting table of `docs/006-deployment.md`, fix it, and continue. Ask the operator only for what you cannot fix yourself.
+Follow [docs/006-deployment.md](docs/006-deployment.md) to set up the isolated `superagent` profile:
 
-## 5. Verify and hand over
+1. **Create the profile and link this bundle** (skip the first command if `~/.dsh/profiles/superagent` already exists):
+   ```sh
+   dsh superagent --from-default-profile web --dump-config > /dev/null
+   dsh plugin --profile superagent add "link:$PWD"
+   mkdir -p "$HOME/.dsh/state/superagent"
+   ```
+2. **Configure `~/.dsh/profiles/superagent/cordis.patch.yml`:**
+   - Start with the required entries for `webserver` (port `3082`), `dsh-superagent` (`stateDir` set to the **absolute path** of `$HOME/.dsh/state/superagent`), `dsh-superagent-feishu` (`disabled: false`), and `dsh-superagent-github` (`disabled: true` in Feishu-only mode):
+     ```yaml
+     - id: webserver
+       config:
+         host: 127.0.0.1
+         port: 3082
+     - id: dsh-superagent
+       config:
+         stateDir: <absolute path to $HOME/.dsh/state/superagent>
+     - id: dsh-superagent-feishu
+       disabled: false
+     - id: dsh-superagent-github
+       disabled: true
+     ```
+   - **Crucial:** Inspect the operator's existing `~/.dsh/profiles/desktop/cordis.patch.yml` (or `~/.dsh/profiles/web/cordis.patch.yml`) and append their existing entries (such as `llm-deepseek`, `llm-pi-ai`, `agent-default-model`, `permission`, `web`, etc.) into `~/.dsh/profiles/superagent/cordis.patch.yml` so the `superagent` profile has working model providers out of the box.
 
-`scripts/dsh-superagent status` exits 0 with no setup problem. If you run in the operator's own DSH profile, create the hourly check of the Hourly check section of `docs/006-deployment.md` with your schedule tool; otherwise give the operator its prompt to schedule there. Then send one message, under 300 words:
+---
 
-- The panel URL, and that the **Superagent** entry in the sidebar is where to look.
-- How to try it: from an account on the allowed list, comment `@<agent login> <request>` on an issue in the repository. A Ticket appears on the overview within about a minute.
-- Three rules for the operator, from the Responsibility section of `docs/000-philosophy.md`: start narrow, tune for less noise, own what the agent says.
-- Where to read more: the numbered documents in `docs/`, in order.
+## Step 5. Start the service and pre-configure Policy & Prompts
+
+1. **Start the background service:**
+   ```sh
+   scripts/dsh-superagent start
+   scripts/dsh-superagent status
+   ```
+   Verify that `scripts/dsh-superagent status` exits `0` and `health.runtime` is `"ready"`.
+
+2. **Pre-configure Feishu Policy and Local Daily Session Prompts via the Management API (`http://127.0.0.1:3082/orchestrator/api`):**
+   Run this script to enable direct messages and `@bot` mentions in Feishu (so any message to the bot in DM or `@bot` in groups is admitted as an explicit request without needing to look up `open_id`s first) and tailor the prompts for local daily session management:
+
+   ```sh
+   python3 - <<'PY'
+   import json, urllib.request
+
+   api = "http://127.0.0.1:3082/orchestrator/api"
+   headers = {"x-orchestrator-request": "1", "content-type": "application/json"}
+
+   def get(path):
+       with urllib.request.urlopen(urllib.request.Request(f"{api}/{path}", headers=headers)) as r:
+           return json.load(r)
+
+   def put(path, payload):
+       req = urllib.request.Request(f"{api}/{path}", data=json.dumps(payload).encode(), headers=headers, method="PUT")
+       with urllib.request.urlopen(req) as r:
+           return json.load(r)
+
+   settings = get("settings")
+   policy_rev = settings["blocks"]["policy"]["revision"]
+   policy_val = settings["blocks"]["policy"]["value"]
+   policy_val["sources"]["feishu"] = {
+       "allowed": [],
+       "syncChat": "",
+       "admission": {
+           "direct": {"unlistedAddressed": "explicit"},
+           "other": {"unlistedAddressed": "explicit"}
+       }
+   }
+   put("settings/policy", {"value": policy_val, "revision": policy_rev})
+
+   prompts = get("prompts")
+   base_rev = prompts["current"]["revision"]
+   cfg = prompts["current"]["config"]
+   cfg["communication"] = (
+       "Return to the source Feishu conversation to deliver results or ask necessary questions. "
+       "Reply in Simplified Chinese (or the language of the user's message), keeping each Feishu message concise (under 100 words, enforced by the transport). "
+       "When a worker reports a ready outcome (or answers a question), deliver the key conclusion, changed files/paths, or answer directly in the originating Feishu topic thread. "
+       "A GitHub pull request is NOT required unless the user explicitly asks for one."
+   )
+   cfg["scope"] = (
+       "Handle coding tasks, codebase exploration, debugging, local scripts, shell operations, and technical questions requested by the user. "
+       "Workers may inspect and modify any local directory the user specifies (such as ~/Documents/code/...) or work inside their own ticket workspace directory ($DSH_SUPERAGENT_DIR). "
+       "Pause and ask a concrete human_action question only when a critical decision or missing prerequisite blocks progress."
+   )
+   cfg["delivery"] = (
+       "Local tasks, answers, and code changes do NOT require opening a GitHub PR unless the user explicitly asks for a PR. "
+       "When the requested work or analysis is complete and verified locally, call orchestrator_report with state='ready' (omit pr_number) and a clear summary so the orchestrator can deliver the result to the user in Feishu."
+   )
+   put("prompts", {"config": cfg, "baseRevision": base_rev})
+   PY
+   ```
+
+---
+
+## Step 6. Hand over to the operator
+
+Once Steps 1–5 are complete and `scripts/dsh-superagent status` exits `0`, send **one concise message** to the operator containing:
+
+1. **Service & Panel URL:** Read the newest `.artifacts/dsh-superagent-superagent-*.log` to show the Web UI URL (`http://127.0.0.1:3082/?token=...`), and note that **Superagent** in the left sidebar opens the management panel.
+2. **Exact commands for the operator to bind their Feishu bot in their own terminal** (replacing `<App_ID>` with their `cli_...` App ID, then pasting their `App Secret` when prompted):
+   ```sh
+   ~/.local/bin/lark-bot config init --app-id <App_ID> --app-secret-stdin
+   ~/.local/bin/lark-bot config strict-mode bot --global
+   ```
+   Explain that running the second command automatically binds `lark-bot` to the running `dsh-superagent` service and connects the Feishu WebSocket consumer (they can verify with `scripts/dsh-superagent status` that `health.feishu` becomes `"ready"`).
+3. **How to use and manage the service:**
+   - Send a direct message to the Feishu bot (or `@bot` in a group) to start a task; reply inside the Feishu topic thread to follow up on that same task session.
+   - Start / stop / restart / check status from the repository root with `scripts/dsh-superagent start | stop | restart | status` (see [docs/001-domain.md](docs/001-domain.md) and [docs/006-deployment.md](docs/006-deployment.md) for details).
